@@ -76,7 +76,9 @@ button:disabled{opacity:.6;cursor:wait}
 <script>
 "use strict";
 const DISCORD_INVITE_CODE = "ddhrpnl";
-const STATUS_URL = "./status.json";
+// Vul hier je ER:LC Server-Key in. Deze sleutel is zichtbaar voor bezoekers.
+const ERLC_API_KEY = "CfjlBnnGkQLDJHkLRxau-yRJmnWEXfgYPdQywbYWddXCYmTSYVmKAODbAwvPT";
+const ERLC_ENDPOINT = "https://api.erlc.gg/v2/server?Queue=true";
 const REFRESH_INTERVAL = 30000;
 const el = id => document.getElementById(id);
 function setStatus(name, message, online) {
@@ -85,20 +87,36 @@ function setStatus(name, message, online) {
 }
 async function updateERLC() {
   try {
-    const response = await fetch(STATUS_URL + "?t=" + Date.now(), {cache:"no-store"});
-    if (!response.ok) throw new Error("status.json niet gevonden (HTTP " + response.status + ")");
+    if (!ERLC_API_KEY || ERLC_API_KEY === "CfjlBnnGkQLDJHkLRxau-yRJmnWEXfgYPdQywbYWddXCYmTSYVmKAODbAwvPT") {
+      throw new Error("Vul eerst je ER:LC Server-Key in bovenaan index.html.");
+    }
+    const response = await fetch(ERLC_ENDPOINT, {
+      method: "GET",
+      headers: { "Server-Key": ERLC_API_KEY, "Accept": "application/json" },
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error("ER:LC API fout (HTTP " + response.status + "): " + detail.slice(0, 180));
+    }
     const data = await response.json();
-    if (!data.ok) throw new Error(data.error || "GitHub Actions kon ER:LC niet ophalen.");
-    el("players").textContent = Number(data.currentPlayers).toLocaleString("nl-NL");
-    el("maxPlayers").textContent = Number(data.maxPlayers).toLocaleString("nl-NL");
-    el("joinCode").textContent = data.joinCode || "--------";
-    el("queue").textContent = data.queue ?? "0";
+    const server = data.server || data.Server || data;
+    const current = server.CurrentPlayers ?? server.currentPlayers;
+    const maximum = server.MaxPlayers ?? server.maxPlayers;
+    if (current === undefined || maximum === undefined) {
+      throw new Error("ER:LC antwoord bevat geen spelersaantallen.");
+    }
+    const queueValue = data.Queue ?? data.queue ?? server.Queue ?? server.queue ?? 0;
+    el("players").textContent = Number(current).toLocaleString("nl-NL");
+    el("maxPlayers").textContent = Number(maximum).toLocaleString("nl-NL");
+    el("joinCode").textContent = server.JoinKey || server.joinKey || "--------";
+    el("queue").textContent = Array.isArray(queueValue) ? queueValue.length : (queueValue ?? 0);
     setStatus("erlc", "ER:LC online", true);
-    el("updated").textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString("nl-NL") : "—";
+    el("updated").textContent = new Date().toLocaleTimeString("nl-NL");
     el("notice").textContent = "";
   } catch (error) {
     setStatus("erlc", "ER:LC niet verbonden", false);
-    el("notice").textContent = error.message + " Controleer of de GitHub Action succesvol is uitgevoerd.";
+    el("notice").textContent = error.message;
   }
 }
 async function updateDiscord() {
