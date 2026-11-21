@@ -11,8 +11,7 @@
 body{margin:0;min-height:100vh;padding:22px;display:grid;place-items:center;background:#080c08;color:var(--cream);font-family:Inter,Arial,sans-serif}
 .dashboard{width:min(1120px,100%);min-height:690px;position:relative;overflow:hidden;border-radius:38px;padding:clamp(24px,5vw,62px);background:linear-gradient(135deg,var(--green),#087021 60%,var(--green2));box-shadow:0 25px 90px #0009;display:flex;flex-direction:column}
 .stripe{position:absolute;top:-30%;bottom:-30%;width:15%;transform:skewX(-27deg);background:#003c10;opacity:.34;pointer-events:none}
-.stripe.one{left:12%}.stripe.two{left:40%;opacity:.2}.stripe.three{left:83%;opacity:.28}
-.stripe.gold{left:67%;width:4%;background:var(--yellow);opacity:.13}
+.stripe.one{left:12%}.stripe.two{left:40%;opacity:.2}.stripe.three{left:83%;opacity:.28}.stripe.gold{left:67%;width:4%;background:var(--yellow);opacity:.13}
 header,.content,.footer,.meta,.actions,.notice{position:relative;z-index:1}
 .topline{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:.85rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
 .brand{color:var(--yellow)}
@@ -43,31 +42,29 @@ button:disabled{opacity:.6;cursor:wait}
   <div class="stripe one"></div><div class="stripe two"></div><div class="stripe three"></div><div class="stripe gold"></div>
   <header>
     <div class="topline"><span class="brand">DDH ROLEPLAY</span><span>LIVE SERVER STATUS</span></div>
-    <h1 id="serverName">In-Game Players</h1>
+    <h1>In-Game Players</h1>
     <div class="subtitle">Emergency Response: Liberty County</div>
   </header>
-
   <section class="content" aria-live="polite">
     <div class="stat">
       <div class="stat-label">In-game players</div>
-      <div class="stat-value" id="players">--</div>
-      <div class="stat-detail">Maximum <span id="maxPlayers">--</span></div>
+      <div class="stat-value" id="players">—</div>
+      <div class="stat-detail">Maximum <span id="maxPlayers">—</span></div>
     </div>
     <div class="stat">
       <div class="stat-label">Discord members</div>
-      <div class="stat-value yellow" id="discordMembers">--</div>
-      <div class="stat-detail" id="discordName">Discord community</div>
+      <div class="stat-value yellow" id="discordMembers">—</div>
+      <div class="stat-detail" id="discordName">Dutch Den Haag Roleplay</div>
     </div>
   </section>
-
   <section class="footer">
     <div class="pill">JOIN CODE: <b id="joinCode">--------</b></div>
-    <div class="pill">QUEUE: <b id="queue">--</b></div>
+    <div class="pill">QUEUE: <b id="queue">—</b></div>
     <div class="pill">DISCORD: <b>ddhrpnl</b></div>
   </section>
   <section class="meta">
-    <span><i class="status-dot" id="erlcDot"></i><span id="erlcStatus">ER:LC connecting…</span></span>
-    <span><i class="status-dot" id="discordDot"></i><span id="discordStatus">Discord connecting…</span></span>
+    <span><i class="status-dot" id="erlcDot"></i><span id="erlcStatus">ER:LC wordt geladen…</span></span>
+    <span><i class="status-dot" id="discordDot"></i><span id="discordStatus">Discord wordt geladen…</span></span>
     <span>Last update: <time id="updated">—</time></span>
   </section>
   <div class="actions">
@@ -78,142 +75,56 @@ button:disabled{opacity:.6;cursor:wait}
 </main>
 <script>
 "use strict";
-
-/*
-  CONFIG
-  Paste your ER:LC private server key below.
-  WARNING: GitHub Pages is public. Anyone can view this key in this file
-  and in browser network requests. This one-file version is NOT secret-safe.
-*/
-const ERLC_API_KEY = "CfjlBnnGkQLDJHkLRxau-yRJmnWEXfgYPdQywbYWddXCYmTSYVmKAODbAwvPT";
-const ERLC_ENDPOINT = "https://api.erlc.gg/v2/server?Queue=true";
 const DISCORD_INVITE_CODE = "ddhrpnl";
-const REFRESH_INTERVAL = 30_000;
-
+const STATUS_URL = "./status.json";
+const REFRESH_INTERVAL = 30000;
 const el = id => document.getElementById(id);
-let erlcBusy = false;
-let discordBusy = false;
-
-function firstDefined(object, keys) {
-  for (const key of keys) {
-    if (object && object[key] !== undefined && object[key] !== null) return object[key];
-  }
-  return undefined;
+function setStatus(name, message, online) {
+  el(name + "Status").textContent = message;
+  el(name + "Dot").classList.toggle("ok", Boolean(online));
 }
-function showStatus(kind, message, online) {
-  el(kind + "Status").textContent = message;
-  el(kind + "Dot").classList.toggle("ok", Boolean(online));
-}
-function friendlyFetchError(error, service) {
-  if (error instanceof TypeError) {
-    return service + " kon niet worden opgehaald. Mogelijk blokkeert CORS de browseraanvraag.";
-  }
-  return error.message || service + " ophalen mislukt.";
-}
-
 async function updateERLC() {
-  if (erlcBusy) return;
-  if (!ERLC_API_KEY || ERLC_API_KEY === "PASTE_YOUR_ERLC_API_KEY_HERE") {
-    showStatus("erlc", "API-key ontbreekt", false);
-    el("notice").textContent = "Vul je ER:LC API-key in bovenaan dit bestand bij ERLC_API_KEY.";
-    return;
-  }
-
-  erlcBusy = true;
-  el("refresh").disabled = true;
   try {
-    const response = await fetch(ERLC_ENDPOINT, {
-      method: "GET",
-      headers: { "Server-Key": ERLC_API_KEY, "Accept": "application/json" },
-      cache: "no-store"
-    });
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) throw new Error("ER:LC API-key ongeldig of geen toegang (HTTP " + response.status + ").");
-      if (response.status === 429) throw new Error("ER:LC rate limit. Probeer het later opnieuw.");
-      throw new Error("ER:LC API fout (HTTP " + response.status + ").");
-    }
-
+    const response = await fetch(STATUS_URL + "?t=" + Date.now(), {cache:"no-store"});
+    if (!response.ok) throw new Error("status.json niet gevonden (HTTP " + response.status + ")");
     const data = await response.json();
-    const server = data.server || data.Server || data;
-    const current = firstDefined(server, ["CurrentPlayers", "currentPlayers", "current_players"]);
-    const maximum = firstDefined(server, ["MaxPlayers", "maxPlayers", "max_players"]);
-    const name = firstDefined(server, ["Name", "name"]);
-    const joinCode = firstDefined(server, ["JoinKey", "joinKey", "join_key"]);
-    const queue = firstDefined(data, ["Queue", "queue"]) ?? firstDefined(server, ["Queue", "queue"]);
-
-    if (current === undefined || maximum === undefined) {
-      throw new Error("ER:LC antwoord ontvangen, maar player count ontbreekt. Controleer API-response en server-key.");
-    }
-
-    el("players").textContent = Number(current).toLocaleString();
-    el("maxPlayers").textContent = Number(maximum).toLocaleString();
-    el("serverName").textContent = name || "In-Game Players";
-    el("joinCode").textContent = joinCode || "--------";
-    el("queue").textContent = Array.isArray(queue) ? queue.length : (queue ?? 0);
-    showStatus("erlc", "ER:LC online", true);
-    el("updated").textContent = new Date().toLocaleTimeString();
+    if (!data.ok) throw new Error(data.error || "GitHub Actions kon ER:LC niet ophalen.");
+    el("players").textContent = Number(data.currentPlayers).toLocaleString("nl-NL");
+    el("maxPlayers").textContent = Number(data.maxPlayers).toLocaleString("nl-NL");
+    el("joinCode").textContent = data.joinCode || "--------";
+    el("queue").textContent = data.queue ?? "0";
+    setStatus("erlc", "ER:LC online", true);
+    el("updated").textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString("nl-NL") : "—";
+    el("notice").textContent = "";
   } catch (error) {
-    showStatus("erlc", "ER:LC niet verbonden", false);
-    el("notice").textContent = friendlyFetchError(error, "ER:LC");
-    console.error("[ER:LC]", error);
-  } finally {
-    erlcBusy = false;
-    el("refresh").disabled = false;
+    setStatus("erlc", "ER:LC niet verbonden", false);
+    el("notice").textContent = error.message + " Controleer of de GitHub Action succesvol is uitgevoerd.";
   }
 }
-
 async function updateDiscord() {
-  if (discordBusy) return;
-  discordBusy = true;
   try {
-    // Discord's public Get Invite endpoint returns approximate counts with with_counts=true.
-    const url = "https://discord.com/api/v10/invites/" +
-      encodeURIComponent(DISCORD_INVITE_CODE) + "?with_counts=true";
-    const response = await fetch(url, {
-      headers: { "Accept": "application/json" },
-      cache: "no-store"
-    });
-    if (!response.ok) throw new Error("Discord invite niet beschikbaar (HTTP " + response.status + ").");
+    const url = "https://discord.com/api/v10/invites/" + encodeURIComponent(DISCORD_INVITE_CODE) + "?with_counts=true";
+    const response = await fetch(url, {headers:{Accept:"application/json"},cache:"no-store"});
+    if (!response.ok) throw new Error("Discord HTTP " + response.status);
     const invite = await response.json();
-    const count = invite.approximate_member_count;
-    if (typeof count !== "number") throw new Error("Discord gaf geen ledenaantal terug.");
-    el("discordMembers").textContent = count.toLocaleString();
+    if (typeof invite.approximate_member_count !== "number") throw new Error("Geen ledental");
+    el("discordMembers").textContent = invite.approximate_member_count.toLocaleString("nl-NL");
     el("discordName").textContent = invite.guild?.name || "Discord community";
-    showStatus("discord", "Discord online", true);
+    setStatus("discord", "Discord online", true);
   } catch (error) {
     el("discordMembers").textContent = "—";
-    showStatus("discord", "Discord count niet beschikbaar", false);
-    console.warn("[Discord]", error);
-  } finally {
-    discordBusy = false;
+    setStatus("discord", "Discord count niet beschikbaar", false);
   }
 }
-
 async function refreshAll() {
+  el("refresh").disabled = true;
   await Promise.allSettled([updateERLC(), updateDiscord()]);
+  el("refresh").disabled = false;
 }
 el("refresh").addEventListener("click", refreshAll);
-
-// Fetch immediately, then update every 30 seconds.
-// Skip background polling while hidden; refresh immediately when the tab is active again.
 refreshAll();
 setInterval(() => { if (!document.hidden) refreshAll(); }, REFRESH_INTERVAL);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
-window.addEventListener("focus", refreshAll);
-
-// Casual copy deterrents only. They cannot prevent viewing page source or network traffic.
-document.addEventListener("contextmenu", event => event.preventDefault());
-document.addEventListener("copy", event => event.preventDefault());
-document.addEventListener("cut", event => event.preventDefault());
-document.addEventListener("keydown", event => {
-  const key = event.key.toLowerCase();
-  if (((event.ctrlKey || event.metaKey) && ["c","u","s"].includes(key)) ||
-      event.key === "F12" ||
-      ((event.ctrlKey || event.metaKey) && event.shiftKey && ["i","j","c"].includes(key))) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-}, true);
 </script>
 </body>
 </html>
